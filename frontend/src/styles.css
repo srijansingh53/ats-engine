@@ -182,3 +182,6 @@ ul.kos li.fail .mark { background: var(--bad-soft); color: var(--bad); }
 .banner.token { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .banner.token input { width: auto; flex: 1; min-width: 160px; padding: 6px 10px; }
 .privacy { text-align: center; margin-top: 8px; }
+
+ul.blockers { margin: 8px 0 4px; padding-left: 18px; color: var(--bad); font-size: 14px; }
+ul.blockers li { margin: 2px 0; }

@@ -89,6 +89,18 @@ export default function Results({ result }) {
             {result.band} <span className="muted">· {result.level} role</span>
           </h2>
           <p>{result.band_action}</p>
+          {(failed.length > 0 || !gate.passed) && (
+            <ul className="blockers">
+              {failed.map((k) => (
+                <li key={k.rule_id}>{k.reason || k.rule}</li>
+              ))}
+              {!gate.passed && (
+                <li>
+                  Technical skill score {gate.score.toFixed(1)} is below the cutoff of {gate.cutoff}
+                </li>
+              )}
+            </ul>
+          )}
           <p className="muted small">{result.yoe} years of relevant experience · {result.page_count} page(s)</p>
         </div>
       </div>
