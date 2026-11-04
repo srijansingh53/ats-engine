@@ -1,6 +1,6 @@
 """Claude-backed extraction and rubric judging.
 
-The LLM only extracts facts and judges rubrics (with quoted evidence). Results are cached by input hash. All arithmetic
+The LLM only extracts facts and judges rubrics (with quoted evidence). All arithmetic
 happens in the deterministic engine, so scores are reproducible for the same extraction.
 """
 from __future__ import annotations
@@ -191,6 +191,54 @@ class LLMError(RuntimeError):
     pass
 
 
+_UNSUPPORTED_KEYS = {"minimum", "maximum", "minItems", "maxItems", "minLength", "maxLength", "pattern", "format"}
+
+
+def strict_schema(node: Any) -> Any:
+    """Adapt a JSON schema for structured outputs: no numeric/length constraints,
+    union types as anyOf, closed objects with every property required."""
+    if isinstance(node, list):
+        return [strict_schema(n) for n in node]
+    if not isinstance(node, dict):
+        return node
+    out = {k: strict_schema(v) for k, v in node.items() if k not in _UNSUPPORTED_KEYS}
+    t = out.get("type")
+    if isinstance(t, list):
+        rest = {k: v for k, v in out.items() if k not in ("type", "description")}
+        variants = []
+        for one in t:
+            v = {"type": one}
+            if one == "object":
+                v.update({k: rest[k] for k in ("properties", "required") if k in rest})
+                v = strict_schema(v)
+            elif one == "array" and "items" in rest:
+                v["items"] = rest["items"]
+            elif "enum" in rest and one != "null":
+                v["enum"] = rest["enum"]
+            variants.append(v)
+        out = {"anyOf": variants, **({"description": node["description"]} if "description" in node else {})}
+    elif t == "object" and "properties" in out:
+        out["additionalProperties"] = False
+        out["required"] = list(out["properties"].keys())
+    return out
+
+
+def _is_bad_request(exc: Exception) -> bool:
+    return getattr(exc, "status_code", None) == 400 or "400" in str(exc)[:40]
+
+
+def _parse_json(resp) -> dict:
+    text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", None) == "text").strip()
+    if text.startswith("```"):
+        text = text.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        if getattr(resp, "stop_reason", None) == "max_tokens":
+            raise LLMError("Claude's response was cut off (max_tokens). Try a shorter resume or JD.") from exc
+        raise LLMError(f"Claude returned invalid JSON: {text[:200]}") from exc
+
+
 class LLM(Protocol):
     def extract_jd(self, jd_text: str) -> dict: ...
     def analyze(self, resume_text: str, jd: dict) -> dict: ...
@@ -227,21 +275,32 @@ class ClaudeLLM:
         key = hashlib.sha256(f"{self.model}|{system}|{user}|{tool_name}".encode()).hexdigest()
 
         def run():
+            base = dict(model=self.model, max_tokens=max_tokens, system=system,
+                        messages=[{"role": "user", "content": user}])
+            # 1st choice: structured outputs (JSON constrained to the schema)
             try:
                 resp = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=max_tokens,
-                    system=system,
+                    **base, output_config={"format": {"type": "json_schema", "schema": strict_schema(schema)}})
+                return _parse_json(resp)
+            except LLMError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                if not _is_bad_request(exc):
+                    raise LLMError(f"Claude API call failed: {exc}") from exc
+                first_error = exc
+            # Fallback: a tool the model is told to call (tool_choice auto works on every model)
+            try:
+                resp = self.client.messages.create(
+                    **{**base, "system": system + f"\nRespond only by calling the `{tool_name}` tool."},
                     tools=[{"name": tool_name, "description": "Return the structured result.", "input_schema": schema}],
-                    tool_choice={"type": "tool", "name": tool_name},
-                    messages=[{"role": "user", "content": user}],
+                    tool_choice={"type": "auto"},
                 )
             except Exception as exc:  # noqa: BLE001
-                raise LLMError(f"Claude API call failed: {exc}") from exc
+                raise LLMError(f"Claude API call failed: {exc} (structured output also failed: {first_error})") from exc
             for block in resp.content:
                 if getattr(block, "type", None) == "tool_use":
                     return block.input
-            raise LLMError("Claude returned no structured output")
+            return _parse_json(resp)
 
         return self.cache.get_or(key, run)
 
