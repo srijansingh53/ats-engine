@@ -28,7 +28,7 @@ This tool scores a resume against a software engineering job description (entry 
 
 Design rules:
 
-- **Claude extracts, Python scores.** Claude turns the JD and resume into structured JSON and judges four rubrics (impact, ownership, projects, resume quality), quoting resume text as evidence. All arithmetic lives in `backend/ats/engine/`, so the same extraction always gives the same score. LLM calls run at temperature 0 and are cached by input hash.
+- **Claude extracts, Python scores.** Claude turns the JD and resume into structured JSON and judges four rubrics (impact, ownership, projects, resume quality), quoting resume text as evidence. All arithmetic lives in `backend/ats/engine/`, so the same extraction always gives the same score. LLM calls are cached by input hash, so re-scoring the same resume and JD is stable.
 - **Only what the resume says.** Links (GitHub, LeetCode) are never fetched.
 - **Every company counts as an IT company.** There is no company-type classification.
 - **No base score for institute tier.** A renowned college adds up to +3 in D6 only when the JD marks a college as Preferred.

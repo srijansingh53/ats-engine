@@ -1,6 +1,6 @@
 """Claude-backed extraction and rubric judging.
 
-The LLM only extracts facts and judges rubrics (with quoted evidence). All arithmetic
+The LLM only extracts facts and judges rubrics (with quoted evidence). Results are cached by input hash. All arithmetic
 happens in the deterministic engine, so scores are reproducible for the same extraction.
 """
 from __future__ import annotations
@@ -231,7 +231,6 @@ class ClaudeLLM:
                 resp = self.client.messages.create(
                     model=self.model,
                     max_tokens=max_tokens,
-                    temperature=0,
                     system=system,
                     tools=[{"name": tool_name, "description": "Return the structured result.", "input_schema": schema}],
                     tool_choice={"type": "tool", "name": tool_name},
