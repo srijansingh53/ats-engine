@@ -16,6 +16,7 @@ def make_llm(responses):
     from ats.llm import _LRU
 
     llm.cache = _LRU()
+    llm.structured_ok = True
     calls = []
 
     def create(**kw):
@@ -74,3 +75,12 @@ def test_cache_hits():
     llm.extract_jd("same " * 20)
     llm.extract_jd("same " * 20)
     assert len(calls) == 1
+
+
+def test_structured_rejection_is_remembered():
+    tool = lambda t: NS(content=[NS(type="tool_use", input={"title": t})], stop_reason="tool_use")
+    llm, calls = make_llm([BadRequest("400 nope"), tool("a"), tool("b")])
+    llm.extract_jd("first " * 20)
+    llm.extract_jd("second " * 20)
+    assert len(calls) == 3  # 400 once, then straight to tools
+    assert "output_config" not in calls[2]

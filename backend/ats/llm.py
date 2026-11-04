@@ -6,12 +6,15 @@ happens in the deterministic engine, so scores are reproducible for the same ext
 from __future__ import annotations
 
 import hashlib
+import logging
 import json
 import os
 from collections import OrderedDict
 from typing import Any, Protocol
 
 from . import config
+
+log = logging.getLogger("ats.llm")
 
 IMPORTANCE = {"type": "string", "enum": ["required", "preferred"]}
 
@@ -191,6 +194,10 @@ class LLMError(RuntimeError):
     pass
 
 
+class _SkipStructured(Exception):
+    pass
+
+
 _UNSUPPORTED_KEYS = {"minimum", "maximum", "minItems", "maxItems", "minLength", "maxLength", "pattern", "format"}
 
 
@@ -270,6 +277,7 @@ class ClaudeLLM:
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model or config.ANTHROPIC_MODEL
         self.cache = _LRU()
+        self.structured_ok = True  # flips to False after the model rejects structured outputs once
 
     def _call(self, system: str, user: str, tool_name: str, schema: dict, max_tokens: int = 8000) -> dict:
         key = hashlib.sha256(f"{self.model}|{system}|{user}|{tool_name}".encode()).hexdigest()
@@ -277,17 +285,24 @@ class ClaudeLLM:
         def run():
             base = dict(model=self.model, max_tokens=max_tokens, system=system,
                         messages=[{"role": "user", "content": user}])
+            first_error = None
             # 1st choice: structured outputs (JSON constrained to the schema)
             try:
+                if not self.structured_ok:
+                    raise _SkipStructured()
                 resp = self.client.messages.create(
                     **base, output_config={"format": {"type": "json_schema", "schema": strict_schema(schema)}})
                 return _parse_json(resp)
             except LLMError:
                 raise
+            except _SkipStructured:
+                pass
             except Exception as exc:  # noqa: BLE001
                 if not _is_bad_request(exc):
                     raise LLMError(f"Claude API call failed: {exc}") from exc
                 first_error = exc
+                self.structured_ok = False
+                log.info("Model %s rejected structured outputs, using tool fallback from now on: %s", self.model, exc)
             # Fallback: a tool the model is told to call (tool_choice auto works on every model)
             try:
                 resp = self.client.messages.create(
