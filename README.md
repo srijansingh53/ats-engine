@@ -46,7 +46,7 @@ You need Python 3.11+, Node 20+ and an [Anthropic API key](https://console.anthr
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-export ANTHROPIC_API_KEY=sk-ant-...
+cp ../.env.example ../.env       # then put your key in .env
 python wsgi.py                      # API on http://localhost:5000
 
 # frontend (second terminal)
