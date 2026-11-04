@@ -47,12 +47,12 @@ cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp ../.env.example ../.env       # then put your key in .env
-python wsgi.py                      # API on http://localhost:5000
+python wsgi.py                      # API on http://localhost:5001
 
 # frontend (second terminal)
 cd frontend
 npm install
-npm run dev                         # UI on http://localhost:5173 (proxies /api to :5000)
+npm run dev                         # UI on http://localhost:5173 (proxies /api to :5001)
 ```
 
 Tests (no API key needed, since the LLM is faked):
