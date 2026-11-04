@@ -4,12 +4,14 @@ This tool scores a resume against a software engineering job description (entry 
 
 **Stack:** Flask (Python 3.13) + React 18 (Vite), with Claude for extraction and rubric judging. Everything ships as one Docker image.
 
+Product spec: [`PRD/ATS-Engine-PRD.md`](PRD/ATS-Engine-PRD.md).
+
 ## How scoring works
 
 | Layer | What it does | Outcome |
 | --- | --- | --- |
 | L0 Parse | PDF, DOCX or TXT to text. Detects white, tiny or off-page text and counts pages | `NEEDS_REVIEW` if unreadable |
-| L1 Knockouts | Required skills, minimum YoE, required experience, degree, certs and JD red flags | `WOULD_BE_REJECTED` |
+| L1 Required criteria | % of Required items met (skills, YoE, experience, degree, certs; partial credit) vs threshold (default 70%). JD red flags are hard knockouts | `WOULD_BE_REJECTED` below threshold, flags above |
 | L2 Skill gate | `10 × Σ w·m·e·r / Σ w` (importance × match × evidence × recency) vs the cutoff (6 for entry, 7 for senior) | `WOULD_BE_REJECTED` |
 | L3 Fit | 8 dimensions × level weights (table below) | 0–100 |
 | L4 Integrity | Hidden text −10, keyword stuffing −3/−5, JD copy-paste −5, timeline conflicts −3. Total capped at −15 | Penalty |
