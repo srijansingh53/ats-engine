@@ -118,7 +118,7 @@ export default function JDEditor({ jd, setJd }) {
 
       <section>
         <h4>Competencies</h4>
-        <p className="hint">Missing a Required skill means the resume would be auto-rejected. Preferred skills only add points.</p>
+        <p className="hint">Required skills count toward the Required criteria threshold below. Preferred skills only add points.</p>
         <ItemList
           label="competency"
           items={jd.competencies || []}
@@ -179,7 +179,7 @@ export default function JDEditor({ jd, setJd }) {
 
       <section>
         <h4>Red flags</h4>
-        <p className="hint">Disqualifiers stated in the JD. A match means the resume would be rejected.</p>
+        <p className="hint">Disqualifiers stated in the JD. These stay hard knockouts: a match means the resume would be rejected.</p>
         <ItemList
           label="red flag"
           hasImportance={false}
@@ -189,6 +189,22 @@ export default function JDEditor({ jd, setJd }) {
           makeItem={(t) => t}
           onChange={(v) => set("red_flags", v)}
         />
+      </section>
+
+      <section>
+        <h4>Required criteria threshold</h4>
+        <div className="slider">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={jd.required_threshold ?? 70}
+            onChange={(e) => set("required_threshold", Number(e.target.value))}
+          />
+          <span className="num">{Number(jd.required_threshold ?? 70)}%</span>
+        </div>
+        <p className="hint">The share of Required items (skills, experience, degree, certs) a resume must meet. Partial matches earn half credit. Missed items below 100% are flagged, not rejected.</p>
       </section>
 
       <section>

@@ -49,6 +49,7 @@ class Result:
     band_action: str
     yoe: float
     skill_gate: dict
+    required_gate: dict
     knockouts: list[dict]
     dimensions: list[dict]
     penalties: list[dict]
@@ -131,65 +132,75 @@ def skill_gate(ctx: Context) -> tuple[dict, list[dict]]:
                      "last_used": an.get("last_used"), "quote": an.get("quote"),
                      "factors": {"w": w, "m": m, "e": e, "r": r}, "value": round(contrib / w, 3) if w else 0})
     score = round(10 * num / den, 1) if den else 10.0
-    cutoff = float(ctx.jd.get("skill_cutoff") or config.SKILL_CUTOFF[ctx.level])
+    raw_cut = ctx.jd.get("skill_cutoff")
+    cutoff = float(raw_cut) if raw_cut not in (None, "") else config.SKILL_CUTOFF[ctx.level]
     return {"score": score, "cutoff": cutoff, "passed": score >= cutoff}, rows
 
 
 # ---------- L1 ----------
 
-def knockouts(ctx: Context, yoe: float, comp_rows: list[dict]) -> tuple[list[dict], list[str]]:
+def _check(rule_id, rule, credit, evidence=None, reason=None, hard=False):
+    credit = round(_clamp(credit), 2)
+    status = "met" if credit >= 1 else "partial" if credit > 0 else "missing"
+    return {"rule_id": rule_id, "rule": rule, "credit": credit, "status": status, "passed": credit >= 1,
+            "evidence": evidence, "reason": None if credit >= 1 else reason, "hard": hard}
+
+
+def knockouts(ctx: Context, yoe: float, comp_rows: list[dict]) -> tuple[list[dict], dict, list[str]]:
+    """Required-criteria gate: each Required item earns credit 0-1; coverage % is compared with the
+    editable threshold. Only JD red flags are hard knockouts."""
     out, flags = [], []
     for i, c in enumerate(comp_rows):
         if c["importance"] != "required":
             continue
-        ok = c["match"] != "none" and c["evidence_type"] != "none"
-        out.append({"rule_id": f"KO-SKILL-{i + 1}", "rule": f"Required skill: {c['name']}", "passed": ok,
-                    "evidence": c.get("quote"),
-                    "reason": None if ok else f"Missing Required: {c['name']}"})
+        credit = 0.0 if c["match"] == "none" or c["evidence_type"] == "none" else 1.0 if c["match"] == "exact" else 0.5
+        out.append(_check(f"REQ-SKILL-{i + 1}", f"Required skill: {c['name']}", credit, c.get("quote"),
+                          f"Missing Required: {c['name']}" if credit == 0 else f"Only a related skill for {c['name']}"))
 
     req_exp = [x for x in ctx.jd.get("experience_requirements") or [] if x.get("importance") == "required"]
     mins = [float(x["min_yoe"]) for x in req_exp if x.get("min_yoe") is not None]
     min_req = max(mins) if mins else None
     if min_req:
-        ok = yoe >= min_req
-        if not ok and min_req - yoe <= 0.5:
-            ok = True
-            flags.append(f"borderline_yoe: {yoe} vs {min_req} required")
-        out.append({"rule_id": "KO-EXP-YOE", "rule": f"At least {min_req:g} years of relevant experience",
-                    "passed": ok, "evidence": f"{yoe} relevant years computed from roles",
-                    "reason": None if ok else f"Relevant experience {yoe} yrs is below the required {min_req:g} yrs"})
+        credit = 1.0 if yoe >= min_req - 0.25 else yoe / min_req
+        out.append(_check("REQ-YOE", f"At least {min_req:g} years of relevant experience", credit,
+                          f"{yoe} relevant years computed from roles",
+                          f"{yoe} relevant years vs {min_req:g} required"))
 
     pairs = _paired(ctx.jd.get("experience_requirements") or [], ctx.analysis.get("experience_requirements") or [])
     for i, (jd_x, an) in enumerate(pairs):
         if jd_x.get("importance") != "required":
             continue
-        met = an.get("met", "no")
-        if met == "partial":
-            flags.append(f"partial_requirement: {jd_x.get('text')}")
-        ok = met in ("yes", "partial")
-        out.append({"rule_id": f"KO-EXP-{i + 1}", "rule": jd_x.get("text"), "passed": ok,
-                    "evidence": an.get("quote"), "reason": None if ok else f"Required experience not shown: {jd_x.get('text')}"})
+        credit = {"yes": 1.0, "partial": 0.5}.get(an.get("met", "no"), 0.0)
+        out.append(_check(f"REQ-EXP-{i + 1}", jd_x.get("text"), credit, an.get("quote"),
+                          f"Not clearly shown: {jd_x.get('text')}"))
 
     deg = ctx.jd.get("degree")
     if deg and deg.get("importance") == "required":
-        dm = ctx.analysis.get("degree_match", "no")
-        ok = dm in ("yes", "related", "not_required")
-        out.append({"rule_id": "KO-DEGREE", "rule": deg.get("text"), "passed": ok, "evidence": None,
-                    "reason": None if ok else "Degree does not match the required degree"})
+        credit = {"yes": 1.0, "not_required": 1.0, "related": 0.75}.get(ctx.analysis.get("degree_match", "no"), 0.0)
+        out.append(_check("REQ-DEGREE", deg.get("text"), credit, None, "Degree is not the one the JD requires"))
 
     certs = ctx.jd.get("certifications") or []
     met = ctx.analysis.get("certifications_met") or []
     for i, c in enumerate(certs):
         if c.get("importance") == "required":
-            ok = bool(met[i]) if i < len(met) else False
-            out.append({"rule_id": f"KO-CERT-{i + 1}", "rule": c.get("text"), "passed": ok, "evidence": None,
-                        "reason": None if ok else f"Missing required certification: {c.get('text')}"})
+            credit = 1.0 if i < len(met) and met[i] else 0.0
+            out.append(_check(f"REQ-CERT-{i + 1}", c.get("text"), credit, None, f"Missing certification: {c.get('text')}"))
+
+    soft = [k for k in out if not k["hard"]]
+    coverage = round(100 * sum(k["credit"] for k in soft) / len(soft), 1) if soft else 100.0
+    threshold = float(ctx.jd.get("required_threshold", config.REQUIRED_THRESHOLD))
+    for k in soft:
+        if not k["passed"]:
+            flags.append(f"required_{k['status']}: {k['rule']}")
 
     for i, (flag, an) in enumerate(_paired(ctx.jd.get("red_flags") or [], ctx.analysis.get("red_flags_hit") or [])):
         hit = bool(an.get("hit"))
-        out.append({"rule_id": f"KO-RF-{i + 1}", "rule": f"Red flag: {flag}", "passed": not hit,
-                    "evidence": an.get("quote"), "reason": f"Matches red flag: {flag}" if hit else None})
-    return out, flags
+        out.append(_check(f"RF-{i + 1}", f"Red flag: {flag}", 0.0 if hit else 1.0, an.get("quote"),
+                          f"Matches red flag: {flag}", hard=True))
+    red_flag_hit = any(k["hard"] and not k["passed"] for k in out)
+    gate = {"coverage": coverage, "threshold": threshold, "items": len(soft),
+            "passed": coverage >= threshold and not red_flag_hit, "red_flag_hit": red_flag_hit}
+    return out, gate, flags
 
 
 # ---------- L3 ----------
@@ -393,7 +404,7 @@ def band_for(score: float) -> tuple[str, str]:
 def compute(ctx: Context) -> Result:
     yoe = relevant_yoe(ctx)
     gate, comp_rows = skill_gate(ctx)
-    kos, flags = knockouts(ctx, yoe, comp_rows)
+    kos, req_gate, flags = knockouts(ctx, yoe, comp_rows)
     dims = dimensions(ctx, yoe, gate, comp_rows, flags)
     pens, iflags = integrity(ctx, yoe)
     flags += iflags
@@ -401,11 +412,16 @@ def compute(ctx: Context) -> Result:
     raw = sum(d["points"] for d in dims) + penalty
     score = int(round(_clamp(raw, 0, 100)))
     band, action = band_for(score)
-    rejected = any(not k["passed"] for k in kos) or not gate["passed"]
+    rejected = not req_gate["passed"] or not gate["passed"]
     if rejected:
-        why = "a knockout check" if any(not k["passed"] for k in kos) else "the technical skill cutoff"
+        if req_gate["red_flag_hit"]:
+            why = "a red flag in the JD"
+        elif not req_gate["passed"]:
+            why = f"the Required criteria ({req_gate['coverage']:g}% met, needs {req_gate['threshold']:g}%)"
+        else:
+            why = "the technical skill cutoff"
         action = (f"It fails {why}, so it would likely be filtered out before anyone reads it. "
                   "Fix the top-ranked items first.")
     return Result(status="WOULD_BE_REJECTED" if rejected else "PASS", level=ctx.level, score=score, band=band,
-                  band_action=action, yoe=yoe, skill_gate=gate, knockouts=kos, dimensions=dims, penalties=pens,
+                  band_action=action, yoe=yoe, skill_gate=gate, required_gate=req_gate, knockouts=kos, dimensions=dims, penalties=pens,
                   flags=flags, competencies=comp_rows, raw_score=raw)

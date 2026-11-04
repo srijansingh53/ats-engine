@@ -52,15 +52,34 @@ def test_pass_case_scores_and_bands(jd, analysis):
     assert d6["points"] <= d6["weight"]
 
 
-def test_missing_required_skill_is_knockout_with_first_fix(jd, analysis):
+def test_one_missing_required_is_flagged_not_rejected(jd, analysis):
+    # 5 required items (Python, Flask group, YoE, exp line, degree); missing 1 -> 80% >= 70%
+    analysis["competencies"][1]["last_used"] = "present"
     analysis["competencies"][0].update(match="none", evidence_type="none", quote=None, last_used=None)
+    jd["skill_cutoff"] = 0
     out = score_resume(jd, analysis, DOC, today=TODAY)
+    assert out["required_gate"]["coverage"] == 80.0
+    assert out["required_gate"]["passed"] and out["status"] == "PASS"
+    assert any(f.startswith("required_missing") for f in out["flags"])
+    fix = next(f for f in out["fixes"] if f["target"] == "Python")
+    assert fix["kind"] == "required"
+
+
+def test_below_required_threshold_rejects_with_knockout_fix_first(jd, analysis):
+    for i in (0, 1):
+        analysis["competencies"][i].update(match="none", evidence_type="none", quote=None, last_used=None)
+    out = score_resume(jd, analysis, DOC, today=TODAY)
+    assert out["required_gate"]["coverage"] == 60.0
     assert out["status"] == "WOULD_BE_REJECTED"
-    ko = next(k for k in out["knockouts"] if k["rule_id"] == "KO-SKILL-1")
-    assert not ko["passed"]
     assert out["fixes"][0]["kind"] == "knockout"
-    assert out["fixes"][0]["target"] == "Python"
-    assert out["fixes"][0]["est_gain"] > 0
+
+
+def test_required_threshold_is_editable(jd, analysis):
+    for i in (0, 1):
+        analysis["competencies"][i].update(match="none", evidence_type="none", quote=None, last_used=None)
+    jd["required_threshold"] = 50
+    jd["skill_cutoff"] = 0
+    assert score_resume(jd, analysis, DOC, today=TODAY)["status"] == "PASS"
 
 
 def test_renowned_bonus_only_when_jd_prefers(jd, analysis):
@@ -70,10 +89,11 @@ def test_renowned_bonus_only_when_jd_prefers(jd, analysis):
     assert d6["bonus"] == 0
 
 
-def test_yoe_knockout(jd, analysis):
+def test_yoe_partial_credit(jd, analysis):
     jd["experience_requirements"][0]["min_yoe"] = 10
     out = score_resume(jd, analysis, DOC, today=TODAY)
-    assert any(k["rule_id"] == "KO-EXP-YOE" and not k["passed"] for k in out["knockouts"])
+    yoe = next(k for k in out["knockouts"] if k["rule_id"] == "REQ-YOE")
+    assert yoe["status"] == "partial" and yoe["credit"] == 0.74
 
 
 def test_red_flag_knockout(jd, analysis):

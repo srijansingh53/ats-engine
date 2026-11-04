@@ -185,3 +185,8 @@ ul.kos li.fail .mark { background: var(--bad-soft); color: var(--bad); }
 
 ul.blockers { margin: 8px 0 4px; padding-left: 18px; color: var(--bad); font-size: 14px; }
 ul.blockers li { margin: 2px 0; }
+
+.warn-text { color: var(--warn); }
+ul.kos li.partial .mark { background: var(--warn-soft); color: var(--warn); }
+ul.kos li.missing .mark { background: var(--bad-soft); color: var(--bad); }
+ul.kos .tag { margin-left: 8px; }

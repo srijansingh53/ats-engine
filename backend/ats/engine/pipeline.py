@@ -12,7 +12,7 @@ MIN_TEXT_CHARS = 200
 ENGINE_VERSION = "weights@v1"
 
 
-KIND_ORDER = {"knockout": 0, "gate": 1}
+KIND_ORDER = {"knockout": 0, "gate": 1, "required": 2}
 
 
 def _rescore_with(ctx: Context, mutate):
@@ -26,6 +26,7 @@ def build_fixes(ctx: Context, result) -> list[dict]:
     base = result.raw_score
     comps = ctx.analysis.get("competencies") or []
     gate_failed = not result.skill_gate["passed"]
+    req_failed = not result.required_gate["passed"]
 
     for i, row in enumerate(result.competencies):
         if i >= len(comps):
@@ -44,7 +45,8 @@ def build_fixes(ctx: Context, result) -> list[dict]:
         new = _rescore_with(ctx, mutate)
         gain = new.raw_score - base
         gate_gain = new.skill_gate["score"] - result.skill_gate["score"]
-        clears = imp == "required" and match == "none"
+        cov_gain = new.required_gate["coverage"] - result.required_gate["coverage"]
+        missing_required = imp == "required" and match != "exact"
         if match == "none":
             action = (f"{name} ({imp}) is not on your resume. If you have used it, add a work or project bullet "
                       f"that names {name} and what you built with it. If you haven't, this is a real gap.")
@@ -59,11 +61,19 @@ def build_fixes(ctx: Context, result) -> list[dict]:
                       f"say so in a current bullet. Older skills count for less.")
         else:
             continue
-        if gain < 0.5 and not clears and gate_gain < 0.3:
+        if gain < 0.5 and not missing_required and gate_gain < 0.3:
             continue
-        kind = "knockout" if clears else "gate" if gate_failed and gate_gain >= 0.3 else "skill"
+        if req_failed and cov_gain > 0:
+            kind = "knockout"
+        elif gate_failed and gate_gain >= 0.3:
+            kind = "gate"
+        elif missing_required:
+            kind = "required"
+        else:
+            kind = "skill"
         fixes.append({"action": action, "est_gain": round(gain, 1), "kind": kind, "target": name,
-                      "skill_gate_gain": round(gate_gain, 1)})
+                      "skill_gate_gain": round(gate_gain, 1),
+                      "required_gain": round(cov_gain, 1)})
 
     # rubric dimensions
     for d in result.dimensions:

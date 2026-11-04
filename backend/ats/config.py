@@ -38,6 +38,9 @@ DIMENSION_NAMES = {
     "D8": "Resume quality",
 }
 
+# L1 required-criteria gate: % of Required items met (partial credit counts)
+REQUIRED_THRESHOLD = 70.0
+
 # L2 skill gate
 SKILL_CUTOFF = {"entry": 6.0, "senior": 7.0}
 IMPORTANCE_WEIGHT = {"required": 2.0, "preferred": 1.0}

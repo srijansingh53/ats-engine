@@ -177,7 +177,7 @@ export default function App() {
               <h3>How scoring works</h3>
               <ol className="layers">
                 <li><b>Parse</b>: reads your resume and the JD into structured data, with personal details ignored.</li>
-                <li><b>Knockouts</b>: missing Required skills, experience, degree or a red flag means it would be auto-rejected.</li>
+                <li><b>Required criteria</b>: the share of Required items met, with partial credit, checked against a threshold (default 70%). JD red flags are hard knockouts.</li>
                 <li><b>Skill gate</b>: a 0–10 technical score, weighted by evidence and recency, checked against a cutoff.</li>
                 <li><b>Fit score</b>: 8 dimensions, weighted differently for entry and senior roles.</li>
                 <li><b>Integrity</b>: penalties for hidden text, keyword stuffing, copying the JD and date conflicts.</li>

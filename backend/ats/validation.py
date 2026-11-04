@@ -52,6 +52,7 @@ def clean_jd(jd) -> dict:
             r["min_yoe"] = _num(x.get("min_yoe"))
             exps.append(r)
     cutoff = _num(jd.get("skill_cutoff"), 0, 10)
+    req_t = _num(jd.get("required_threshold"), 0, 100)
     return {
         "title": _s(jd.get("title"), 120),
         "level": level,
@@ -64,4 +65,5 @@ def clean_jd(jd) -> dict:
         "red_flags": [_s(f) for f in (jd.get("red_flags") or [])[:20] if _s(f)],
         "location": _s(jd.get("location"), 120) or None,
         "skill_cutoff": cutoff if cutoff is not None else config.SKILL_CUTOFF[level],
+        "required_threshold": req_t if req_t is not None else config.REQUIRED_THRESHOLD,
     }

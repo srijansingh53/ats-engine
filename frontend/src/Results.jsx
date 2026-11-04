@@ -6,7 +6,7 @@ const STATUS = {
   NEEDS_REVIEW: { label: "Couldn't read resume", cls: "warn" },
 };
 
-const KIND_LABEL = { knockout: "Clears a knockout", gate: "Raises skill gate", skill: "Skill", quality: "Quality", integrity: "Integrity" };
+const KIND_LABEL = { knockout: "Lifts Required %", required: "Required item", gate: "Raises skill gate", skill: "Skill", quality: "Quality", integrity: "Integrity" };
 
 function Ring({ score }) {
   const r = 52;
@@ -77,8 +77,10 @@ export default function Results({ result }) {
       </div>
     );
   }
-  const failed = result.knockouts.filter((k) => !k.passed);
   const gate = result.skill_gate;
+  const req = result.required_gate;
+  const redFlags = result.knockouts.filter((k) => k.hard && !k.passed);
+  const missed = result.knockouts.filter((k) => !k.hard && !k.passed);
   return (
     <div className="results">
       <div className="card summary">
@@ -89,11 +91,16 @@ export default function Results({ result }) {
             {result.band} <span className="muted">· {result.level} role</span>
           </h2>
           <p>{result.band_action}</p>
-          {(failed.length > 0 || !gate.passed) && (
+          {(!req.passed || !gate.passed) && (
             <ul className="blockers">
-              {failed.map((k) => (
-                <li key={k.rule_id}>{k.reason || k.rule}</li>
+              {redFlags.map((k) => (
+                <li key={k.rule_id}>{k.reason}</li>
               ))}
+              {!req.passed && !req.red_flag_hit && (
+                <li>
+                  Required criteria {req.coverage}% met, below the {req.threshold}% threshold
+                </li>
+              )}
               {!gate.passed && (
                 <li>
                   Technical skill score {gate.score.toFixed(1)} is below the cutoff of {gate.cutoff}
@@ -157,20 +164,40 @@ export default function Results({ result }) {
       )}
 
       <div className="card">
-        <h3>Knockout checks {failed.length > 0 && <span className="bad-text">· {failed.length} failed</span>}</h3>
-        {result.knockouts.length === 0 && <p className="muted small">The JD sets no Required items.</p>}
+        <h3>
+          Required criteria
+          {missed.length > 0 && <span className="muted">· {missed.length} flagged</span>}
+        </h3>
+        {req.items > 0 ? (
+          <div className="gate">
+            <div className="gate-bar">
+              <span className={req.coverage >= req.threshold ? "good" : "bad"} style={{ width: `${req.coverage}%` }} />
+              <i style={{ left: `${req.threshold}%` }} title={`Threshold ${req.threshold}%`} />
+            </div>
+            <span className="num">
+              {req.coverage}% <span className="muted">met · threshold {req.threshold}%</span>
+            </span>
+          </div>
+        ) : (
+          <p className="muted small">The JD sets no Required items.</p>
+        )}
         <ul className="kos">
           {result.knockouts.map((k) => (
-            <li key={k.rule_id} className={k.passed ? "" : "fail"}>
-              <span className="mark">{k.passed ? "✓" : "✕"}</span>
+            <li key={k.rule_id} className={k.status}>
+              <span className="mark">{k.status === "met" ? "✓" : k.status === "partial" ? "½" : "✕"}</span>
               <div>
                 <span>{k.rule}</span>
-                {k.reason && <p className="small bad-text">{k.reason}</p>}
+                {k.hard && !k.passed && <span className="tag tag-knockout">Hard knockout</span>}
+                {k.reason && <p className={`small ${k.hard ? "bad-text" : "warn-text"}`}>{k.reason}</p>}
                 {k.evidence && <p className="small muted">“{k.evidence}”</p>}
               </div>
             </li>
           ))}
         </ul>
+        <p className="muted small">
+          Each Required item earns full, half or no credit. Missed items are flagged; the resume is only rejected when
+          coverage drops below the threshold, or when a JD red flag matches.
+        </p>
       </div>
 
       <div className="card">
