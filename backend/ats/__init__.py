@@ -14,6 +14,7 @@ from .llm import ClaudeLLM, LLMError
 from .parsing import ParseError, parse_resume
 
 log = logging.getLogger("ats")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 DEFAULT_STATIC = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
@@ -30,6 +31,7 @@ def create_app(llm_factory=None, static_dir: str | os.PathLike | None = None) ->
 
     @app.errorhandler(LLMError)
     def _llm_err(e):
+        log.error("LLM error: %s", e)
         code = 503 if "not set" in str(e) else 502
         return jsonify(error=str(e)), code
 
