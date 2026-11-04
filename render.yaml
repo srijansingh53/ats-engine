@@ -16,5 +16,5 @@ services:
         value: "2"
       - key: RATE_LIMIT_SCORE
         value: "10 per hour;30 per day"
-      - key: ACCESS_TOKEN    # optional: set a value to make the app private
-        sync: false
+      # Optional: to make the app private, add ACCESS_TOKEN in the Render dashboard
+      # (Environment tab). Leave it unset for a public app.
