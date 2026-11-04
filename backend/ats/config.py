@@ -41,6 +41,9 @@ DIMENSION_NAMES = {
 # L1 required-criteria gate: % of Required items met (partial credit counts)
 REQUIRED_THRESHOLD = 70.0
 
+# Degree: "or equivalent work experience" counts as met with this many relevant years
+EQUIVALENT_EXPERIENCE_YEARS = {"entry": 2.0, "senior": 5.0}
+
 # L2 skill gate
 SKILL_CUTOFF = {"entry": 6.0, "senior": 7.0}
 IMPORTANCE_WEIGHT = {"required": 2.0, "preferred": 1.0}

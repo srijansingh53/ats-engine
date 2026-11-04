@@ -153,3 +153,37 @@ def test_pdf_hidden_text_detection():
     assert doc.page_count == 1
     assert any("kubernetes" in h for h in doc.hidden_text)
     assert "Visible resume text" in doc.text
+
+
+import pytest
+
+
+@pytest.mark.parametrize("degree,branch,expected", [
+    ("B.Tech", "Information Technology", 1.0),
+    ("B.E.", "Electronics and Communication", 1.0),
+    ("BCA", "", 1.0),
+    ("MCA", "", 1.0),
+    ("M.Tech", "CSE", 1.0),
+    ("B.Sc", "Computer Science", 1.0),
+    ("B.Tech", "Mechanical Engineering", 0.25),
+    ("BA", "History", 0.0),
+])
+def test_degree_cs_related_fields(jd, analysis, degree, branch, expected):
+    jd["degree"] = {"text": "Bachelor's+ in Computer Science or related field", "importance": "required"}
+    analysis["degree_match"] = "no"  # rule-based matching must not depend on the LLM
+    analysis["resume"]["education"] = [{"institute": "X", "degree": degree, "branch": branch, "is_renowned": False}]
+    out = score_resume(jd, analysis, DOC, today=TODAY)
+    ko = next(k for k in out["knockouts"] if k["rule_id"] == "REQ-DEGREE")
+    assert ko["credit"] == expected
+
+
+def test_degree_equivalent_experience(jd, analysis):
+    jd["degree"] = {"text": "Bachelor's+ in CS or related field, or equivalent work experience", "importance": "required"}
+    analysis["degree_match"] = "no"
+    analysis["resume"]["education"] = []
+    out = score_resume(jd, analysis, DOC, today=TODAY)  # 7.4 relevant years >= 5 (senior)
+    ko = next(k for k in out["knockouts"] if k["rule_id"] == "REQ-DEGREE")
+    assert ko["credit"] == 1.0 and "Equivalent work experience" in ko["evidence"]
+    jd["degree"]["text"] = "Bachelor's in CS required"
+    out = score_resume(jd, analysis, DOC, today=TODAY)
+    assert next(k for k in out["knockouts"] if k["rule_id"] == "REQ-DEGREE")["credit"] == 0.0

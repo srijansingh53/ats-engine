@@ -137,6 +137,36 @@ def skill_gate(ctx: Context) -> tuple[dict, list[dict]]:
     return {"score": score, "cutoff": cutoff, "passed": score >= cutoff}, rows
 
 
+
+# ---------- degree matching ----------
+
+CS_FIELD = re.compile(
+    r"\b(computer|computing|cse|cs|it|information (technology|science|systems)|software|ece|electronics|"
+    r"electrical|e&c|e&tc|eee|telecom\w*|data science|artificial intelligence|ai|machine learning|"
+    r"mathematics and computing|math(s|ematics)? (and|&) computing|bca|mca|cyber ?security)\b", re.I)
+DEGREE_LEVEL = re.compile(
+    r"\b(b\.? ?tech|b\.? ?e\b|b\.? ?sc|bs\b|bachelor|bca|m\.? ?tech|m\.? ?e\b|m\.? ?sc|ms\b|master|mca|"
+    r"ph\.? ?d|doctor|dual degree|integrated)", re.I)
+EQUIVALENT = re.compile(r"equivalent (work |practical |industry )?experience|or equivalent", re.I)
+
+
+def degree_assessment(ctx: "Context", yoe: float) -> tuple[float, str | None]:
+    """Credit 0-1 for the JD's degree requirement. Any bachelor's-or-higher in a CS-related field
+    (CS, IT, ECE, BCA, MCA, M.Tech CSE, ...) is a full match. If the JD accepts 'equivalent work
+    experience', enough relevant experience also counts as a full match."""
+    edu = ctx.resume.get("education") or []
+    for e in edu:
+        text = f"{e.get('degree', '')} {e.get('branch', '')}"
+        if DEGREE_LEVEL.search(text) and (CS_FIELD.search(text) or re.search(r"\b(bca|mca)\b", text, re.I)):
+            return 1.0, f"{e.get('degree', '')} {e.get('branch') or ''}".strip()
+    deg_text = (ctx.jd.get("degree") or {}).get("text", "")
+    if EQUIVALENT.search(deg_text) and yoe >= config.EQUIVALENT_EXPERIENCE_YEARS[ctx.level]:
+        return 1.0, f"Equivalent work experience: {yoe} relevant years"
+    llm = {"yes": 1.0, "not_required": 1.0, "related": 0.75}.get(ctx.analysis.get("degree_match", "no"), 0.0)
+    if llm == 0 and edu and any(DEGREE_LEVEL.search(f"{e.get('degree', '')}") for e in edu):
+        llm = 0.25  # some bachelor's+, unrelated field
+    return llm, None
+
 # ---------- L1 ----------
 
 def _check(rule_id, rule, credit, evidence=None, reason=None, hard=False):
@@ -176,8 +206,8 @@ def knockouts(ctx: Context, yoe: float, comp_rows: list[dict]) -> tuple[list[dic
 
     deg = ctx.jd.get("degree")
     if deg and deg.get("importance") == "required":
-        credit = {"yes": 1.0, "not_required": 1.0, "related": 0.75}.get(ctx.analysis.get("degree_match", "no"), 0.0)
-        out.append(_check("REQ-DEGREE", deg.get("text"), credit, None, "Degree is not the one the JD requires"))
+        credit, ev = degree_assessment(ctx, yoe)
+        out.append(_check("REQ-DEGREE", deg.get("text"), credit, ev, "Degree is not in a CS-related field the JD accepts"))
 
     certs = ctx.jd.get("certifications") or []
     met = ctx.analysis.get("certifications_met") or []
@@ -272,8 +302,12 @@ def dimensions(ctx: Context, yoe: float, gate: dict, comp_rows: list[dict], flag
     # D6 education
     edu = ctx.resume.get("education") or []
     parts: list[tuple[float, float]] = []
-    dm = ctx.analysis.get("degree_match", "not_required")
-    deg_val = {"yes": 1.0, "related": 0.7, "no": 0.3 if edu else 0.0}.get(dm, 1.0 if edu else 0.5)
+    if ctx.jd.get("degree"):
+        deg_val, _ = degree_assessment(ctx, yoe)
+        deg_val = max(deg_val, 0.3 if edu else 0.0)
+    else:
+        deg_val = 1.0 if edu else 0.5
+    dm = "yes" if deg_val >= 1 else "no"
     parts.append((0.6, deg_val))
     jd_certs = ctx.jd.get("certifications") or []
     if jd_certs:

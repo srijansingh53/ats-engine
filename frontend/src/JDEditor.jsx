@@ -158,6 +158,7 @@ export default function JDEditor({ jd, setJd }) {
       <section>
         <h4>Education</h4>
         <span className="lbl">Degree</span>
+        <p className="hint">Any bachelor's or higher in a CS-related field (CS, IT, ECE, BCA, MCA, M.Tech CSE…) counts as a match. Include "or equivalent work experience" to accept experience instead.</p>
         <OptionalReq value={jd.degree} onChange={(v) => set("degree", v)} placeholder="e.g. B.Tech in CS or related" />
         <span className="lbl">College</span>
         <p className="hint">A renowned college only adds bonus points (up to +3) when this is set. No one loses points for not having it.</p>
