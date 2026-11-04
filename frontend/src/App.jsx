@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { extractJD, health, scoreResume } from "./api.js";
+import { extractJD, getToken, health, scoreResume, setToken } from "./api.js";
 import JDEditor from "./JDEditor.jsx";
 import Results from "./Results.jsx";
 
@@ -11,12 +11,19 @@ export default function App() {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [apiInfo, setApiInfo] = useState(null);
+  const [token, setTokenState] = useState(getToken());
+  const [needToken, setNeedToken] = useState(false);
   const [drag, setDrag] = useState(false);
   const fileInput = useRef(null);
   const resultsRef = useRef(null);
 
   useEffect(() => {
-    health().then(setApiInfo).catch(() => setApiInfo({ ok: false }));
+    health()
+      .then((h) => {
+        setApiInfo(h);
+        if (h.auth_required && !getToken()) setNeedToken(true);
+      })
+      .catch(() => setApiInfo({ ok: false }));
   }, []);
 
   const run = async (label, fn) => {
@@ -26,6 +33,7 @@ export default function App() {
       await fn();
     } catch (e) {
       setError(e.message);
+      if (e.status === 401) setNeedToken(true);
     } finally {
       setBusy("");
     }
@@ -63,7 +71,31 @@ export default function App() {
             <p className="muted">Score your resume against a software engineering JD, see why, and fix what matters.</p>
           </div>
         </div>
-        {apiInfo && !apiInfo.llm_configured && (
+        {needToken && (
+          <form
+            className="banner token"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setToken(token.trim());
+              setNeedToken(false);
+              setError("");
+            }}
+          >
+            <span>This deployment needs an access token.</span>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setTokenState(e.target.value)}
+              placeholder="Access token"
+              aria-label="Access token"
+            />
+            <button type="submit" className="ghost">Save</button>
+          </form>
+        )}
+        {apiInfo && apiInfo.ok === false && (
+          <p className="banner">Can't reach the scoring server.</p>
+        )}
+        {apiInfo && apiInfo.ok && !apiInfo.llm_configured && (
           <p className="banner">The server has no ANTHROPIC_API_KEY set, so scoring won't work until it does.</p>
         )}
       </header>
@@ -128,6 +160,9 @@ export default function App() {
             <button type="button" className="primary" disabled={!canScore} onClick={onScore}>
               Score my resume
             </button>
+            <p className="muted small privacy">
+              Your resume is processed in memory and never stored. Its text is sent to Anthropic's API for analysis.
+            </p>
           </div>
 
           {busy && <p className="busy"><span className="spinner" /> {busy}</p>}

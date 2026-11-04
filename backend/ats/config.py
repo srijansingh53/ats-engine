@@ -1,8 +1,23 @@
 """Scoring configuration. Mirrors the PRD: weights per level, gate cutoffs, factors."""
 import os
 
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
-MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "5"))
+def _env(name: str, default: str) -> str:
+    return os.environ.get(name, default).strip()
+
+
+# --- runtime / production settings (all overridable by env vars) ---
+ANTHROPIC_MODEL = _env("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+ANTHROPIC_TIMEOUT_S = float(_env("ANTHROPIC_TIMEOUT_S", "90"))
+ANTHROPIC_MAX_RETRIES = int(_env("ANTHROPIC_MAX_RETRIES", "2"))
+MAX_UPLOAD_MB = int(_env("MAX_UPLOAD_MB", "5"))
+MAX_RESUME_CHARS = int(_env("MAX_RESUME_CHARS", "30000"))  # caps token cost per request
+MAX_JD_CHARS = int(_env("MAX_JD_CHARS", "20000"))
+ACCESS_TOKEN = _env("ACCESS_TOKEN", "")  # optional: require X-Access-Token on /api/*
+RATE_LIMIT_ENABLED = _env("RATE_LIMIT_ENABLED", "true").lower() != "false"
+RATE_LIMIT_SCORE = _env("RATE_LIMIT_SCORE", "10 per hour;30 per day")
+RATE_LIMIT_EXTRACT = _env("RATE_LIMIT_EXTRACT", "20 per hour;60 per day")
+RATE_LIMIT_STORAGE = _env("RATE_LIMIT_STORAGE_URI", "memory://")  # e.g. redis://host:6379/0 for multi-instance
+TRUSTED_PROXIES = int(_env("TRUSTED_PROXIES", "1"))
 
 LEVELS = ("entry", "senior")
 

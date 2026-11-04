@@ -274,7 +274,8 @@ class ClaudeLLM:
             raise LLMError("ANTHROPIC_API_KEY is not set")
         import anthropic
 
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = anthropic.Anthropic(api_key=api_key, timeout=config.ANTHROPIC_TIMEOUT_S,
+                                           max_retries=config.ANTHROPIC_MAX_RETRIES)
         self.model = model or config.ANTHROPIC_MODEL
         self.cache = _LRU()
         self.structured_ok = True  # flips to False after the model rejects structured outputs once

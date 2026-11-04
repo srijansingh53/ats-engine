@@ -8,6 +8,9 @@ import pdfplumber
 from docx import Document
 
 
+MAX_PAGES = 10
+
+
 class ParseError(ValueError):
     pass
 
@@ -46,6 +49,8 @@ def parse_pdf(data: bytes) -> ParsedDocument:
         raise ParseError(f"Could not open PDF: {exc}") from exc
     texts, hidden = [], []
     with pdf:
+        if len(pdf.pages) > MAX_PAGES:
+            raise ParseError(f"Resume has {len(pdf.pages)} pages; the limit is {MAX_PAGES}.")
         for page in pdf.pages:
             texts.append(page.extract_text() or "")
             run: list[str] = []
@@ -81,11 +86,19 @@ def parse_docx(data: bytes) -> ParsedDocument:
 
 def parse_resume(filename: str, data: bytes) -> ParsedDocument:
     name = (filename or "").lower()
-    if name.endswith(".pdf") or data[:4] == b"%PDF":
+    if not data:
+        raise ParseError("The uploaded file is empty.")
+    if data[:4] == b"%PDF":
         return parse_pdf(data)
+    if name.endswith(".pdf"):
+        raise ParseError("This file is named .pdf but is not a valid PDF.")
     if name.endswith(".docx"):
+        if data[:2] != b"PK":
+            raise ParseError("This file is named .docx but is not a valid Word document.")
         return parse_docx(data)
     if name.endswith((".txt", ".md")):
+        if b"\x00" in data[:4096]:
+            raise ParseError("This text file looks binary.")
         text = data.decode("utf-8", errors="replace")
         return ParsedDocument(text=text, page_count=max(1, round(len(text.split()) / 550 + 0.49)))
     raise ParseError("Unsupported file type. Upload a PDF, DOCX or TXT resume.")

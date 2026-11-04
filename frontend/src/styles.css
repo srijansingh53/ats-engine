@@ -178,3 +178,7 @@ ul.kos li.fail .mark { background: var(--bad-soft); color: var(--bad); }
   .item .toggle { margin-left: 18px; }
   .app { padding: 16px 16px 48px; }
 }
+
+.banner.token { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.banner.token input { width: auto; flex: 1; min-width: 160px; padding: 6px 10px; }
+.privacy { text-align: center; margin-top: 8px; }

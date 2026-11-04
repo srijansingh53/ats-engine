@@ -1,0 +1,20 @@
+# Render Blueprint: New → Blueprint → pick this repo. Set ANTHROPIC_API_KEY when prompted.
+services:
+  - type: web
+    name: ats-engine
+    runtime: docker
+    plan: starter            # "free" also works but sleeps after 15 min idle (slow first request)
+    region: singapore
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # prompted once, stored as a secret
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5-5
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: RATE_LIMIT_SCORE
+        value: "10 per hour;30 per day"
+      - key: ACCESS_TOKEN    # optional: set a value to make the app private
+        sync: false

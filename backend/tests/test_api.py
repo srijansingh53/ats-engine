@@ -10,7 +10,7 @@ from ats import create_app
 @pytest.fixture
 def client(tmp_path):
     fake = FakeLLM()
-    app = create_app(llm_factory=lambda: fake, static_dir=tmp_path)
+    app = create_app(llm_factory=lambda: fake, static_dir=tmp_path, testing=True)
     app.testing = True
     return app.test_client(), fake
 
@@ -67,15 +67,15 @@ def test_unsupported_type(client):
 
 def test_missing_api_key_returns_503(monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    app = create_app(static_dir=tmp_path)
+    app = create_app(static_dir=tmp_path, testing=True)
     r = app.test_client().post("/api/jd/extract", json={"jd_text": "x" * 80})
     assert r.status_code == 503
-    assert "ANTHROPIC_API_KEY" in r.get_json()["error"]
+    assert "API key" in r.get_json()["error"]
 
 
 def test_spa_fallback(tmp_path):
     (tmp_path / "index.html").write_text("<html>app</html>")
-    app = create_app(llm_factory=FakeLLM, static_dir=tmp_path)
+    app = create_app(llm_factory=FakeLLM, static_dir=tmp_path, testing=True)
     c = app.test_client()
     assert b"app" in c.get("/").data
     assert b"app" in c.get("/some/route").data
