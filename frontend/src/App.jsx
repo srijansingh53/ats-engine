@@ -171,7 +171,11 @@ export default function App() {
 
         <div className="output" ref={resultsRef}>
           {result ? (
-            <Results result={result} />
+            <Results
+              result={result}
+              skillCutoff={jd ? Number(jd.skill_cutoff) : undefined}
+              requiredThreshold={jd ? Number(jd.required_threshold ?? 70) : undefined}
+            />
           ) : (
             <div className="card empty">
               <h3>How scoring works</h3>

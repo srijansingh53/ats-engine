@@ -190,3 +190,7 @@ ul.blockers li { margin: 2px 0; }
 ul.kos li.partial .mark { background: var(--warn-soft); color: var(--warn); }
 ul.kos li.missing .mark { background: var(--bad-soft); color: var(--bad); }
 ul.kos .tag { margin-left: 8px; }
+
+.live-note { color: var(--accent); margin-top: 6px; }
+.gate-bar i { transition: left .2s ease; }
+.gate-bar span { transition: width .3s ease, background-color .2s ease; }

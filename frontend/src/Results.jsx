@@ -67,9 +67,16 @@ function Dimension({ d }) {
   );
 }
 
-export default function Results({ result }) {
-  const st = STATUS[result.status] || STATUS.NEEDS_REVIEW;
+const BAND_ADVICE = {
+  Strong: "Likely to clear screening. Apply as is",
+  Good: "Competitive. Apply the top 2-3 fixes",
+  Borderline: "At risk. Fix the gaps before applying",
+  Weak: "Likely filtered out. Major gaps against this JD",
+};
+
+export default function Results({ result, skillCutoff, requiredThreshold }) {
   if (result.status === "NEEDS_REVIEW") {
+    const st = STATUS.NEEDS_REVIEW;
     return (
       <div className="card">
         <span className={`badge ${st.cls}`}>{st.label}</span>
@@ -77,8 +84,31 @@ export default function Results({ result }) {
       </div>
     );
   }
-  const gate = result.skill_gate;
-  const req = result.required_gate;
+  // Thresholds are re-applied live: the scores don't change, only pass/fail against the current sliders.
+  const cutoff = Number.isFinite(skillCutoff) ? skillCutoff : result.skill_gate.cutoff;
+  const threshold = Number.isFinite(requiredThreshold) ? requiredThreshold : result.required_gate.threshold;
+  const gate = { ...result.skill_gate, cutoff, passed: result.skill_gate.score >= cutoff };
+  const req = {
+    ...result.required_gate,
+    threshold,
+    passed: result.required_gate.coverage >= threshold && !result.required_gate.red_flag_hit,
+  };
+  const rejected = !gate.passed || !req.passed;
+  const st = STATUS[rejected ? "WOULD_BE_REJECTED" : "PASS"];
+  const changed = cutoff !== result.skill_gate.cutoff || threshold !== result.required_gate.threshold;
+  const why = req.red_flag_hit
+    ? "a red flag in the JD"
+    : !req.passed
+      ? `the Required criteria (${req.coverage}% met, needs ${threshold}%)`
+      : "the technical skill cutoff";
+  const liveKind = (f) => {
+    if (f.kind === "gate" && gate.passed) return "skill";
+    if (f.kind === "knockout" && req.passed) return "required";
+    return f.kind;
+  };
+  const action = rejected
+    ? `It fails ${why}, so it would likely be filtered out before anyone reads it. Fix the top-ranked items first.`
+    : BAND_ADVICE[result.band] || result.band_action;
   const redFlags = result.knockouts.filter((k) => k.hard && !k.passed);
   const missed = result.knockouts.filter((k) => !k.hard && !k.passed);
   return (
@@ -90,7 +120,7 @@ export default function Results({ result }) {
           <h2>
             {result.band} <span className="muted">· {result.level} role</span>
           </h2>
-          <p>{result.band_action}</p>
+          <p>{action}</p>
           {(!req.passed || !gate.passed) && (
             <ul className="blockers">
               {redFlags.map((k) => (
@@ -109,6 +139,9 @@ export default function Results({ result }) {
             </ul>
           )}
           <p className="muted small">{result.yoe} years of relevant experience · {result.page_count} page(s)</p>
+          {changed && (
+            <p className="small live-note">Status updated for the current thresholds. Scores don't change.</p>
+          )}
         </div>
       </div>
 
@@ -149,12 +182,12 @@ export default function Results({ result }) {
             {result.fixes.map((f) => (
               <li key={f.rank}>
                 <div>
-                  <span className={`tag tag-${f.kind}`}>{KIND_LABEL[f.kind] || f.kind}</span>
+                  <span className={`tag tag-${liveKind(f)}`}>{KIND_LABEL[liveKind(f)] || liveKind(f)}</span>
                   <p>{f.action}</p>
                 </div>
                 <span className="gain">
                   +{f.est_gain} pts
-                  {f.kind === "gate" && <small className="muted">gate +{f.skill_gate_gain}</small>}
+                  {liveKind(f) === "gate" && <small className="muted">gate +{f.skill_gate_gain}</small>}
                 </span>
               </li>
             ))}
